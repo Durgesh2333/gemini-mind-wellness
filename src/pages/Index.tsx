@@ -4,12 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, LogOut } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Sparkles, LogOut, Settings as SettingsIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import BreathingExercise from "@/components/BreathingExercise";
 import StressTrendChart from "@/components/StressTrendChart";
+import ChatBot from "@/components/ChatBot";
+import VoiceInput from "@/components/VoiceInput";
+import EmojiSelector from "@/components/EmojiSelector";
+import ResourceLibrary from "@/components/ResourceLibrary";
+import Settings from "@/components/Settings";
 
 interface StressAnalysis {
   stressScore: number;
@@ -24,18 +30,52 @@ interface StressEntry {
   stress_score: number;
   stress_factors: string[];
   wellness_tips: string[];
+  mood_emoji: string | null;
   created_at: string;
 }
 
 const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [text, setText] = useState("");
+  const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<StressAnalysis | null>(null);
   const [entries, setEntries] = useState<StressEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("home");
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    
+    // Schedule daily reminder
+    const scheduleDailyReminder = () => {
+      const now = new Date();
+      const reminder = new Date();
+      reminder.setHours(20, 0, 0, 0); // 8 PM daily
+      
+      if (now > reminder) {
+        reminder.setDate(reminder.getDate() + 1);
+      }
+      
+      const timeout = reminder.getTime() - now.getTime();
+      setTimeout(() => {
+        if (Notification.permission === "granted") {
+          new Notification("Daily Wellness Check-in", {
+            body: "How are you feeling today? Take a moment to check in with yourself.",
+            icon: "/favicon.ico",
+          });
+        }
+        scheduleDailyReminder(); // Reschedule for next day
+      }, timeout);
+    };
+    
+    scheduleDailyReminder();
+  }, []);
 
   useEffect(() => {
     // Set up auth state listener
@@ -116,12 +156,16 @@ const Index = () => {
           stress_score: data.stressScore,
           stress_factors: data.stressFactors,
           wellness_tips: data.wellnessTips,
+          mood_emoji: selectedEmoji,
         });
 
       if (insertError) throw insertError;
 
       // Refresh entries
       await fetchEntries();
+      
+      setText("");
+      setSelectedEmoji(null);
       
       toast({
         title: "Analysis Complete!",
@@ -181,6 +225,16 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-6xl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
+          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
+            <TabsTrigger value="home">Home</TabsTrigger>
+            <TabsTrigger value="settings">
+              <SettingsIcon className="w-4 h-4 mr-2" />
+              Settings
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="home" className="space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-8">
@@ -204,30 +258,47 @@ const Index = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Textarea
-              placeholder="I'm feeling overwhelmed with my upcoming exams. I have three tests next week and I'm not sure where to start..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              className="min-h-[150px] resize-none text-base"
-            />
-            <Button 
-              onClick={handleAnalyze} 
-              disabled={isAnalyzing}
-              className="w-full md:w-auto bg-gradient-calm hover:opacity-90 transition-opacity"
-              size="lg"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Analyze My Stress
-                </>
-              )}
-            </Button>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                How are you feeling? (Optional)
+              </label>
+              <EmojiSelector
+                selectedEmoji={selectedEmoji}
+                onSelect={setSelectedEmoji}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Textarea
+                placeholder="I'm feeling overwhelmed with my upcoming exams. I have three tests next week and I'm not sure where to start..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className="min-h-[150px] resize-none text-base"
+              />
+              <div className="flex gap-2">
+                <VoiceInput
+                  onTranscript={(transcript) => setText((prev) => prev + " " + transcript)}
+                />
+                <Button 
+                  onClick={handleAnalyze} 
+                  disabled={isAnalyzing}
+                  className="flex-1 bg-gradient-calm hover:opacity-90 transition-opacity"
+                  size="lg"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Analyze My Stress
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -291,6 +362,9 @@ const Index = () => {
 
             {/* Stress Trend Chart */}
             <StressTrendChart entries={entries} />
+
+            {/* Resource Library */}
+            <ResourceLibrary stressFactors={currentAnalysis?.stressFactors} />
           </div>
 
           {/* Right Column - Breathing Exercise & History */}
@@ -312,9 +386,14 @@ const Index = () => {
                       return (
                         <div key={entry.id} className="p-4 bg-muted/30 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors">
                           <div className="flex items-start justify-between gap-4 mb-2">
-                            <p className="text-sm text-muted-foreground flex-1 line-clamp-2">
-                              {entry.text.substring(0, 100)}{entry.text.length > 100 ? '...' : ''}
-                            </p>
+                            <div className="flex-1">
+                              {entry.mood_emoji && (
+                                <span className="text-2xl mr-2">{entry.mood_emoji}</span>
+                              )}
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {entry.text.substring(0, 100)}{entry.text.length > 100 ? '...' : ''}
+                              </p>
+                            </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-xl">{level.emoji}</span>
                               <Badge 
@@ -341,7 +420,16 @@ const Index = () => {
             )}
           </div>
         </div>
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <Settings />
+          </TabsContent>
+        </Tabs>
       </main>
+
+      {/* Chatbot */}
+      <ChatBot />
 
       {/* Footer */}
       <footer className="border-t border-border/50 bg-card/50 backdrop-blur-sm mt-12">
